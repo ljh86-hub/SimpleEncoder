@@ -1,6 +1,5 @@
 """
 SimpleEncoder - FFmpeg 기반 동영상 인코더
-의존성: pip install customtkinter
 """
 
 import customtkinter as ctk
@@ -12,10 +11,22 @@ import os
 import re
 import json
 import sys
+import traceback
 from pathlib import Path
 
-# ── PyInstaller 번들 ffmpeg 경로 ──────────────────────────────────
-def _ffmpeg_bin(name: str) -> str:
+# ── 로그 파일 ────────────────────────────────────────────────────
+_exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
+_log_path = os.path.join(_exe_dir, "SimpleEncoder_log.txt")
+
+def _log(msg):
+    try:
+        with open(_log_path, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
+
+# ── FFmpeg 경로 ───────────────────────────────────────────────────
+def _ffmpeg_bin(name):
     if getattr(sys, 'frozen', False):
         base = sys._MEIPASS
     else:
@@ -28,16 +39,15 @@ def _ffmpeg_bin(name: str) -> str:
 FFMPEG  = _ffmpeg_bin('ffmpeg.exe')
 FFPROBE = _ffmpeg_bin('ffprobe.exe')
 
-# ── 테마 ──────────────────────────────────────────────────────────
+# ── 설정 ─────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-# ── 프리셋 ────────────────────────────────────────────────────────
 PRESETS = {
     "고화질 (H.265 | 저용량 권장)": {
         "vcodec": "libx265", "crf": "22", "preset": "medium",
         "acodec": "aac", "ab": "192k", "ext": ".mp4",
-        "desc": "파일 크기 downdow  화질 upup  (H.264 대비 ~40% 절감)"
+        "desc": "파일 크기 down  화질 up  (H.264 대비 ~40% 절감)"
     },
     "일반 (H.264 | 호환성 최고)": {
         "vcodec": "libx264", "crf": "23", "preset": "medium",
@@ -66,7 +76,7 @@ FRAMERATES  = ["원본 유지", "60", "30", "25", "24"]
 VIDEO_EXTS  = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ts", ".m2ts"}
 
 
-def get_video_info(path: str) -> dict:
+def get_video_info(path):
     cmd = [FFPROBE, "-v", "quiet", "-print_format", "json",
            "-show_format", "-show_streams", path]
     try:
@@ -93,10 +103,8 @@ class FileRow(ctk.CTkFrame):
         super().__init__(master, fg_color=("#2b2b2b", "#1e1e1e"), corner_radius=8, **kw)
         self.path = path
         self.name = os.path.basename(path)
-
         self.grid_columnconfigure(2, weight=1)
 
-        # 드래그 핸들
         handle = ctk.CTkLabel(self, text="=", font=("Consolas", 18),
                                text_color="#666", cursor="fleur", width=24)
         handle.grid(row=0, column=0, padx=(6, 0), pady=6)
@@ -104,16 +112,13 @@ class FileRow(ctk.CTkFrame):
         handle.bind("<B1-Motion>",       lambda e: on_drag_motion(e, self))
         handle.bind("<ButtonRelease-1>", lambda e: on_drag_end(e, self))
 
-        # 체크박스
         self.var = tk.BooleanVar(value=True)
         ctk.CTkCheckBox(self, text="", variable=self.var, width=28).grid(
             row=0, column=1, padx=(4, 0), pady=6)
 
-        # 파일명
         ctk.CTkLabel(self, text=self.name, anchor="w",
                      font=("Consolas", 12)).grid(row=0, column=2, sticky="ew", padx=8)
 
-        # 파일 정보
         info = get_video_info(path)
         size_txt = f"{info['size_mb']:.1f} MB" if "size_mb" in info else ""
         res_txt  = f"{info.get('width','?')}x{info.get('height','?')}" if "width" in info else ""
@@ -122,7 +127,6 @@ class FileRow(ctk.CTkFrame):
             ctk.CTkLabel(self, text=meta, text_color=("#888", "#666"),
                          font=("Consolas", 11)).grid(row=0, column=3, padx=8)
 
-        # 삭제 버튼
         ctk.CTkButton(self, text="X", width=28, height=28,
                       fg_color="transparent", hover_color="#c0392b",
                       command=lambda: on_remove(self)).grid(row=0, column=4, padx=(0, 6))
@@ -149,7 +153,6 @@ class App(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
 
-        # 헤더
         hdr = ctk.CTkFrame(self, fg_color=("#1a1a2e", "#0f0f1a"), corner_radius=0)
         hdr.grid(row=0, column=0, sticky="ew")
         ctk.CTkLabel(hdr, text="SimpleEncoder",
@@ -159,7 +162,6 @@ class App(ctk.CTk):
                      font=("Segoe UI", 11),
                      text_color="#90a4ae").pack(side="left", pady=14)
 
-        # 버튼 행
         top = ctk.CTkFrame(self, fg_color="transparent")
         top.grid(row=1, column=0, sticky="ew", padx=16, pady=(12, 0))
         top.grid_columnconfigure(1, weight=1)
@@ -172,7 +174,6 @@ class App(ctk.CTk):
                       fg_color="#37474f", hover_color="#c0392b",
                       command=self._clear_list).grid(row=0, column=2)
 
-        # 파일 목록
         self._list_outer = ctk.CTkFrame(self, fg_color=("#1c1c1c", "#161616"))
         self._list_outer.grid(row=2, column=0, sticky="nsew", padx=16, pady=8)
         self._list_outer.grid_rowconfigure(0, weight=1)
@@ -189,7 +190,6 @@ class App(ctk.CTk):
             text_color="#555", font=("Segoe UI", 13))
         self._empty_lbl.grid(row=0, column=0, pady=40)
 
-        # 설정 패널
         cfg = ctk.CTkFrame(self, fg_color=("#1e1e2e", "#12121f"))
         cfg.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 6))
         cfg.grid_columnconfigure((0, 1, 2, 3), weight=1)
@@ -197,11 +197,10 @@ class App(ctk.CTk):
         ctk.CTkLabel(cfg, text="인코딩 프리셋", font=("Segoe UI", 11, "bold")).grid(
             row=0, column=0, padx=12, pady=(10, 2), sticky="w")
         self._preset_var = ctk.StringVar(value=list(PRESETS.keys())[0])
-        self._preset_menu = ctk.CTkOptionMenu(
-            cfg, variable=self._preset_var,
-            values=list(PRESETS.keys()),
-            command=self._on_preset_change, width=220)
-        self._preset_menu.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="ew")
+        ctk.CTkOptionMenu(cfg, variable=self._preset_var,
+                          values=list(PRESETS.keys()),
+                          command=self._on_preset_change, width=220).grid(
+            row=1, column=0, padx=12, pady=(0, 10), sticky="ew")
 
         ctk.CTkLabel(cfg, text="해상도", font=("Segoe UI", 11, "bold")).grid(
             row=0, column=1, padx=8, pady=(10, 2), sticky="w")
@@ -228,7 +227,6 @@ class App(ctk.CTk):
         self._desc_lbl.grid(row=2, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
         self._on_preset_change(self._preset_var.get())
 
-        # 출력 경로
         out_row = ctk.CTkFrame(self, fg_color="transparent")
         out_row.grid(row=4, column=0, sticky="ew", padx=16, pady=2)
         out_row.grid_columnconfigure(1, weight=1)
@@ -238,7 +236,6 @@ class App(ctk.CTk):
         ctk.CTkButton(out_row, text="찾기", width=60,
                       command=self._choose_outdir).grid(row=0, column=2, padx=(6, 0))
 
-        # 진행바
         self._progress = ctk.CTkProgressBar(self, height=14)
         self._progress.grid(row=5, column=0, sticky="ew", padx=16, pady=(8, 2))
         self._progress.set(0)
@@ -247,7 +244,6 @@ class App(ctk.CTk):
                                         font=("Consolas", 11))
         self._status_lbl.grid(row=6, column=0, padx=16, sticky="w")
 
-        # 버튼
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.grid(row=7, column=0, padx=16, pady=10, sticky="ew")
         btn_row.grid_columnconfigure(0, weight=1)
@@ -266,27 +262,20 @@ class App(ctk.CTk):
             command=self._cancel_encode, state="disabled")
         self._cancel_btn.grid(row=0, column=1, padx=(8, 0))
 
-    # ── 드래그앤드롭 (탐색기 → 앱) ───────────────────────────────
     def _setup_drop(self):
-        """윈도우 네이티브 WM_DROPFILES 처리"""
         try:
             import ctypes
             import ctypes.wintypes as wt
-
             WM_DROPFILES = 0x0233
-            DragAcceptFiles = ctypes.windll.shell32.DragAcceptFiles
-            DragQueryFile   = ctypes.windll.shell32.DragQueryFileW
-            DragFinish      = ctypes.windll.shell32.DragFinish
-
             hwnd = self.winfo_id()
-            DragAcceptFiles(hwnd, True)
+            ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
 
             def wndproc(hwnd, msg, wparam, lparam):
                 if msg == WM_DROPFILES:
-                    count = DragQueryFile(wparam, 0xFFFFFFFF, None, 0)
+                    count = ctypes.windll.shell32.DragQueryFileW(wparam, 0xFFFFFFFF, None, 0)
                     for i in range(count):
                         buf = ctypes.create_unicode_buffer(260)
-                        DragQueryFile(wparam, i, buf, 260)
+                        ctypes.windll.shell32.DragQueryFileW(wparam, i, buf, 260)
                         p = buf.value
                         if os.path.isfile(p) and Path(p).suffix.lower() in VIDEO_EXTS:
                             self.after(0, self._add_row, p)
@@ -294,20 +283,18 @@ class App(ctk.CTk):
                             for f in sorted(Path(p).rglob("*")):
                                 if f.suffix.lower() in VIDEO_EXTS:
                                     self.after(0, self._add_row, str(f))
-                    DragFinish(wparam)
+                    ctypes.windll.shell32.DragFinish(wparam)
                     return 0
                 return ctypes.windll.user32.CallWindowProcW(
                     self._old_wndproc, hwnd, msg, wparam, lparam)
 
-            WNDPROCTYPE = ctypes.WINFUNCTYPE(
-                ctypes.c_long, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
+            WNDPROCTYPE = ctypes.WINFUNCTYPE(ctypes.c_long, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
             self._new_wndproc = WNDPROCTYPE(wndproc)
-            self._old_wndproc = ctypes.windll.user32.SetWindowLongPtrW(
-                hwnd, -4, self._new_wndproc)
-        except Exception:
-            pass
+            self._old_wndproc = ctypes.windll.user32.SetWindowLongPtrW(hwnd, -4, self._new_wndproc)
+            _log("드롭 설정 완료")
+        except Exception as e:
+            _log(f"드롭 설정 실패(무시): {e}")
 
-    # ── 행 순서 드래그 ────────────────────────────────────────────
     def _drag_start(self, event, row):
         self._drag_row = row
         self._drag_start_y = event.y_root
@@ -336,7 +323,6 @@ class App(ctk.CTk):
         for i, r in enumerate(self._file_rows):
             r.grid(row=i, column=0, sticky="ew", pady=2, padx=4)
 
-    # ── 파일 관리 ─────────────────────────────────────────────────
     def _add_files(self):
         paths = filedialog.askopenfilenames(
             title="동영상 파일 선택",
@@ -387,7 +373,6 @@ class App(ctk.CTk):
         desc = PRESETS.get(val, {}).get("desc", "")
         self._desc_lbl.configure(text=f"  {desc}")
 
-    # ── 인코딩 ───────────────────────────────────────────────────
     def _get_output_dir(self, src_path):
         val = self._out_var.get().strip()
         if val == "원본 파일과 같은 폴더" or not val:
@@ -434,7 +419,7 @@ class App(ctk.CTk):
         try:
             subprocess.check_output([FFMPEG, "-version"], stderr=subprocess.DEVNULL)
         except FileNotFoundError:
-            messagebox.showerror("FFmpeg 없음", "FFmpeg을 찾을 수 없습니다.")
+            messagebox.showerror("오류", f"FFmpeg을 찾을 수 없습니다.\n경로: {FFMPEG}")
             return
 
         self._encode_btn.configure(state="disabled")
@@ -449,7 +434,6 @@ class App(ctk.CTk):
         merge = self._merge_var.get() and len(rows) > 1
         total = 1 if merge else len(rows)
         last_out_dir = ""
-
         try:
             if merge:
                 base = rows[0].path
@@ -473,6 +457,7 @@ class App(ctk.CTk):
                 self._progress.set(1.0)
                 self.after(0, self._on_encode_done, last_out_dir)
         except Exception as e:
+            _log(f"인코딩 오류: {traceback.format_exc()}")
             self._set_status(f"오류: {e}", "#ef5350")
             self.after(0, self._reset_buttons)
 
@@ -495,10 +480,8 @@ class App(ctk.CTk):
         self._proc = subprocess.Popen(
             cmd, stderr=subprocess.PIPE,
             universal_newlines=True, encoding="utf-8", errors="replace")
-
         time_pat = re.compile(r"time=(\d+):(\d+):([\d.]+)")
         dur_pat  = re.compile(r"Duration:\s*(\d+):(\d+):([\d.]+)")
-
         for line in self._proc.stderr:
             if self._cancel_flag:
                 self._proc.terminate()
@@ -529,6 +512,26 @@ class App(ctk.CTk):
         self.after(0, self._status_lbl.configure, {"text": text, "text_color": color})
 
 
-if __name__ == "__main__":
+# ── 메인 ─────────────────────────────────────────────────────────
+_log("=== SimpleEncoder 시작 ===")
+_log(f"FFMPEG: {FFMPEG}")
+_log(f"FFPROBE: {FFPROBE}")
+_log(f"ffmpeg 존재: {os.path.exists(FFMPEG)}")
+
+try:
+    _log("App 생성 시작")
     app = App()
+    _log("App 생성 완료, mainloop 진입")
     app.mainloop()
+    _log("mainloop 종료")
+except Exception:
+    err = traceback.format_exc()
+    _log("=== 오류 발생 ===")
+    _log(err)
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("오류", f"실행 오류:\n\n{err[:800]}\n\n로그: {_log_path}")
+        root.destroy()
+    except Exception:
+        pass
