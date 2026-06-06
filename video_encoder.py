@@ -14,6 +14,23 @@ import os
 import re
 import json
 from pathlib import Path
+import sys
+
+def _ffmpeg_bin(name: str) -> str:
+    """PyInstaller 번들 또는 시스템 PATH에서 ffmpeg/ffprobe 경로 반환"""
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    bundled = os.path.join(base, name)
+    if os.path.exists(bundled):
+        return bundled
+    return name  # PATH fallback
+
+FFMPEG  = _ffmpeg_bin('ffmpeg.exe')
+FFPROBE = _ffmpeg_bin('ffprobe.exe')
+
+
 
 # ── 테마 설정 ──────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -55,7 +72,7 @@ FRAMERATES  = ["원본 유지", "60", "30", "25", "24"]
 def get_video_info(path: str) -> dict:
     """FFprobe로 영상 정보 추출"""
     cmd = [
-        "ffprobe", "-v", "quiet",
+        FFPROBE, "-v", "quiet",
         "-print_format", "json",
         "-show_format", "-show_streams",
         path
@@ -333,7 +350,7 @@ class App(ctk.CTk):
         p = PRESETS[preset_key]
         merge = self._merge_var.get() and len(inputs) > 1
 
-        cmd = ["ffmpeg", "-y"]
+        cmd = [FFMPEG, "-y"]
 
         if merge:
             # concat demuxer 사용
@@ -388,7 +405,7 @@ class App(ctk.CTk):
 
         # FFmpeg 확인
         try:
-            subprocess.check_output(["ffmpeg", "-version"], stderr=subprocess.DEVNULL)
+            subprocess.check_output([FFMPEG, "-version"], stderr=subprocess.DEVNULL)
         except FileNotFoundError:
             messagebox.showerror(
                 "FFmpeg 없음",
