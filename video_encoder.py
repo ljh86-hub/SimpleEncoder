@@ -14,17 +14,6 @@ import sys
 import traceback
 from pathlib import Path
 
-# ── 로그 파일 ────────────────────────────────────────────────────
-_exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
-_log_path = os.path.join(_exe_dir, "SimpleEncoder_log.txt")
-
-def _log(msg):
-    try:
-        with open(_log_path, "a", encoding="utf-8") as f:
-            f.write(msg + "\n")
-    except Exception:
-        pass
-
 # ── FFmpeg 경로 ───────────────────────────────────────────────────
 def _ffmpeg_bin(name):
     if getattr(sys, 'frozen', False):
@@ -147,7 +136,9 @@ class App(ctk.CTk):
         self._drag_start_y = 0
 
         self._build_ui()
-        self._setup_drop()
+
+        # 드롭: 윈도우 열린 후 안전하게 등록
+        self.after(500, self._setup_drop)
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
@@ -262,6 +253,7 @@ class App(ctk.CTk):
             command=self._cancel_encode, state="disabled")
         self._cancel_btn.grid(row=0, column=1, padx=(8, 0))
 
+    # ── 드롭 (윈도우 완전히 뜬 후 0.5초 뒤 등록) ─────────────────
     def _setup_drop(self):
         try:
             import ctypes
@@ -291,10 +283,10 @@ class App(ctk.CTk):
             WNDPROCTYPE = ctypes.WINFUNCTYPE(ctypes.c_long, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
             self._new_wndproc = WNDPROCTYPE(wndproc)
             self._old_wndproc = ctypes.windll.user32.SetWindowLongPtrW(hwnd, -4, self._new_wndproc)
-            _log("드롭 설정 완료")
-        except Exception as e:
-            _log(f"드롭 설정 실패(무시): {e}")
+        except Exception:
+            pass  # 드롭 안 돼도 나머지 기능은 정상 동작
 
+    # ── 행 순서 드래그 ────────────────────────────────────────────
     def _drag_start(self, event, row):
         self._drag_row = row
         self._drag_start_y = event.y_root
@@ -323,6 +315,7 @@ class App(ctk.CTk):
         for i, r in enumerate(self._file_rows):
             r.grid(row=i, column=0, sticky="ew", pady=2, padx=4)
 
+    # ── 파일 관리 ─────────────────────────────────────────────────
     def _add_files(self):
         paths = filedialog.askopenfilenames(
             title="동영상 파일 선택",
@@ -373,6 +366,7 @@ class App(ctk.CTk):
         desc = PRESETS.get(val, {}).get("desc", "")
         self._desc_lbl.configure(text=f"  {desc}")
 
+    # ── 인코딩 ───────────────────────────────────────────────────
     def _get_output_dir(self, src_path):
         val = self._out_var.get().strip()
         if val == "원본 파일과 같은 폴더" or not val:
@@ -457,7 +451,6 @@ class App(ctk.CTk):
                 self._progress.set(1.0)
                 self.after(0, self._on_encode_done, last_out_dir)
         except Exception as e:
-            _log(f"인코딩 오류: {traceback.format_exc()}")
             self._set_status(f"오류: {e}", "#ef5350")
             self.after(0, self._reset_buttons)
 
@@ -513,25 +506,15 @@ class App(ctk.CTk):
 
 
 # ── 메인 ─────────────────────────────────────────────────────────
-_log("=== SimpleEncoder 시작 ===")
-_log(f"FFMPEG: {FFMPEG}")
-_log(f"FFPROBE: {FFPROBE}")
-_log(f"ffmpeg 존재: {os.path.exists(FFMPEG)}")
-
 try:
-    _log("App 생성 시작")
     app = App()
-    _log("App 생성 완료, mainloop 진입")
     app.mainloop()
-    _log("mainloop 종료")
 except Exception:
     err = traceback.format_exc()
-    _log("=== 오류 발생 ===")
-    _log(err)
     try:
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("오류", f"실행 오류:\n\n{err[:800]}\n\n로그: {_log_path}")
+        messagebox.showerror("오류", f"실행 오류:\n\n{err[:800]}")
         root.destroy()
     except Exception:
         pass
