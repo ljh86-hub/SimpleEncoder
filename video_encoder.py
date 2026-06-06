@@ -15,7 +15,6 @@ import sys
 import traceback
 from pathlib import Path
 
-# ── FFmpeg 경로 ───────────────────────────────────────────────────
 def _ffmpeg_bin(name):
     if getattr(sys, 'frozen', False):
         base = sys._MEIPASS
@@ -29,7 +28,6 @@ def _ffmpeg_bin(name):
 FFMPEG  = _ffmpeg_bin('ffmpeg.exe')
 FFPROBE = _ffmpeg_bin('ffprobe.exe')
 
-# ── 설정 ─────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
@@ -65,31 +63,30 @@ RESOLUTIONS = ["원본 유지", "3840x2160 (4K)", "2560x1440 (2K)", "1920x1080 (
 FRAMERATES  = ["원본 유지", "60", "30", "25", "24"]
 VIDEO_EXTS  = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ts", ".m2ts"}
 
+SI = subprocess.STARTUPINFO()
+SI.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+SI.wShowWindow = 0
 
 def get_video_info(path):
-    cmd = [FFPROBE, "-v", "quiet", "-print_format", "json",
-           "-show_format", "-show_streams", path]
     try:
-        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(
+            [FFPROBE, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
+            stderr=subprocess.DEVNULL, startupinfo=SI,
+            creationflags=subprocess.CREATE_NO_WINDOW)
         data = json.loads(out)
         info = {}
         fmt = data.get("format", {})
-        info["duration"] = float(fmt.get("duration", 0))
-        info["size_mb"]  = int(fmt.get("size", 0)) / 1024 / 1024
+        info["size_mb"] = int(fmt.get("size", 0)) / 1024 / 1024
         for s in data.get("streams", []):
             if s.get("codec_type") == "video":
                 info["width"]  = s.get("width", "?")
                 info["height"] = s.get("height", "?")
-                info["vcodec"] = s.get("codec_name", "?")
-            elif s.get("codec_type") == "audio":
-                info["acodec"] = s.get("codec_name", "?")
         return info
     except Exception:
         return {}
 
 
-def parse_drop_paths(data: str) -> list:
-    """tkinterdnd2 드롭 데이터 파싱 (공백 포함 경로 처리)"""
+def parse_drop_paths(data):
     paths = []
     data = data.strip()
     while data:
@@ -130,7 +127,7 @@ class FileRow(ctk.CTkFrame):
         res_txt  = f"{info.get('width','?')}x{info.get('height','?')}" if "width" in info else ""
         meta = " . ".join(filter(None, [res_txt, size_txt]))
         if meta:
-            ctk.CTkLabel(self, text=meta, text_color=("#888", "#666"),
+            ctk.CTkLabel(self, text=meta, text_color="#666",
                          font=("Consolas", 11)).grid(row=0, column=3, padx=8)
 
         ctk.CTkButton(self, text="X", width=28, height=28,
@@ -141,13 +138,11 @@ class FileRow(ctk.CTkFrame):
 class App(TkinterDnD.Tk):
     def __init__(self):
         super().__init__()
+        ctk.set_appearance_mode("dark")
         self.title("SimpleEncoder")
         self.geometry("860x700")
         self.minsize(700, 560)
         self.resizable(True, True)
-
-        # customtkinter 테마를 TkinterDnD.Tk 에 적용
-        ctk.set_appearance_mode("dark")
 
         self._file_rows = []
         self._proc = None
@@ -228,15 +223,19 @@ class App(TkinterDnD.Tk):
                           values=FRAMERATES, width=130).grid(
             row=1, column=2, padx=8, pady=(0, 10), sticky="ew")
 
-        ctk.CTkLabel(cfg, text="병합 옵션", font=("Segoe UI", 11, "bold")).grid(
+        ctk.CTkLabel(cfg, text="옵션", font=("Segoe UI", 11, "bold")).grid(
             row=0, column=3, padx=12, pady=(10, 2), sticky="w")
         self._merge_var = tk.BooleanVar(value=False)
         ctk.CTkSwitch(cfg, text="파일 합치기", variable=self._merge_var).grid(
-            row=1, column=3, padx=12, pady=(0, 10), sticky="w")
+            row=1, column=3, padx=12, pady=(0, 4), sticky="w")
+        self._open_folder_var = tk.BooleanVar(value=True)
+        ctk.CTkCheckBox(cfg, text="완료 후 폴더 열기", variable=self._open_folder_var,
+                        font=("Segoe UI", 11)).grid(
+            row=2, column=3, padx=12, pady=(0, 10), sticky="w")
 
         self._desc_lbl = ctk.CTkLabel(cfg, text="", text_color="#90a4ae",
                                       font=("Segoe UI", 11), wraplength=800)
-        self._desc_lbl.grid(row=2, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
+        self._desc_lbl.grid(row=3, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
         self._on_preset_change(self._preset_var.get())
 
         out_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -274,7 +273,6 @@ class App(TkinterDnD.Tk):
             command=self._cancel_encode, state="disabled")
         self._cancel_btn.grid(row=0, column=1, padx=(8, 0))
 
-    # ── 드롭 처리 ────────────────────────────────────────────────
     def _on_drop(self, event):
         for p in parse_drop_paths(event.data):
             if os.path.isfile(p) and Path(p).suffix.lower() in VIDEO_EXTS:
@@ -284,7 +282,6 @@ class App(TkinterDnD.Tk):
                     if f.suffix.lower() in VIDEO_EXTS:
                         self._add_row(str(f))
 
-    # ── 행 순서 드래그 ────────────────────────────────────────────
     def _drag_start(self, event, row):
         self._drag_row = row
         self._drag_start_y = event.y_root
@@ -313,7 +310,6 @@ class App(TkinterDnD.Tk):
         for i, r in enumerate(self._file_rows):
             r.grid(row=i, column=0, sticky="ew", pady=2, padx=4)
 
-    # ── 파일 관리 ─────────────────────────────────────────────────
     def _add_files(self):
         paths = filedialog.askopenfilenames(
             title="동영상 파일 선택",
@@ -364,7 +360,6 @@ class App(TkinterDnD.Tk):
         desc = PRESETS.get(val, {}).get("desc", "")
         self._desc_lbl.configure(text=f"  {desc}")
 
-    # ── 인코딩 ───────────────────────────────────────────────────
     def _get_output_dir(self, src_path):
         val = self._out_var.get().strip()
         if val == "원본 파일과 같은 폴더" or not val:
@@ -409,7 +404,8 @@ class App(TkinterDnD.Tk):
             messagebox.showwarning("파일 없음", "인코딩할 파일을 추가하세요.")
             return
         try:
-            subprocess.check_output([FFMPEG, "-version"], stderr=subprocess.DEVNULL)
+            subprocess.check_output([FFMPEG, "-version"], stderr=subprocess.DEVNULL,
+                startupinfo=SI, creationflags=subprocess.CREATE_NO_WINDOW)
         except FileNotFoundError:
             messagebox.showerror("오류", f"FFmpeg을 찾을 수 없습니다.\n경로: {FFMPEG}")
             return
@@ -454,12 +450,12 @@ class App(TkinterDnD.Tk):
 
     def _on_encode_done(self, out_dir):
         self._reset_buttons()
-        if out_dir and os.path.isdir(out_dir):
+        if self._open_folder_var.get() and out_dir and os.path.isdir(out_dir):
             try:
                 os.startfile(out_dir)
             except Exception:
                 pass
-        messagebox.showinfo("완료", "인코딩 완료!\n출력 폴더를 엽니다.")
+        messagebox.showinfo("완료", "인코딩 완료!")
 
     def _reset_buttons(self):
         self._encode_btn.configure(state="normal")
@@ -470,7 +466,8 @@ class App(TkinterDnD.Tk):
         self._set_status(f"[{idx+1}/{total}] 인코딩 중: {os.path.basename(output)}")
         self._proc = subprocess.Popen(
             cmd, stderr=subprocess.PIPE,
-            universal_newlines=True, encoding="utf-8", errors="replace")
+            universal_newlines=True, encoding="utf-8", errors="replace",
+            startupinfo=SI, creationflags=subprocess.CREATE_NO_WINDOW)
         time_pat = re.compile(r"time=(\d+):(\d+):([\d.]+)")
         dur_pat  = re.compile(r"Duration:\s*(\d+):(\d+):([\d.]+)")
         for line in self._proc.stderr:
