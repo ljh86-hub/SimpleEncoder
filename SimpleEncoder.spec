@@ -10,7 +10,7 @@ a = Analysis(
         ('ffmpeg/ffmpeg.exe', '.'),
         ('ffmpeg/ffprobe.exe', '.'),
     ],
-    datas=collect_data_files('customtkinter'),
+    datas=collect_data_files('customtkinter') + collect_data_files('tkinterdnd2'),
     hiddenimports=[
         'customtkinter',
         'PIL',
