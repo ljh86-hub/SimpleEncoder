@@ -2,6 +2,7 @@
 SimpleEncoder - FFmpeg 기반 동영상 인코더
 """
 
+from tkinterdnd2 import TkinterDnD, DND_FILES
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -87,6 +88,22 @@ def get_video_info(path):
         return {}
 
 
+def parse_drop_paths(data: str) -> list:
+    """tkinterdnd2 드롭 데이터 파싱 (공백 포함 경로 처리)"""
+    paths = []
+    data = data.strip()
+    while data:
+        if data.startswith('{'):
+            end = data.index('}')
+            paths.append(data[1:end])
+            data = data[end+1:].strip()
+        else:
+            parts = data.split(' ', 1)
+            paths.append(parts[0])
+            data = parts[1].strip() if len(parts) > 1 else ''
+    return paths
+
+
 class FileRow(ctk.CTkFrame):
     def __init__(self, master, path, on_remove, on_drag_start, on_drag_motion, on_drag_end, **kw):
         super().__init__(master, fg_color=("#2b2b2b", "#1e1e1e"), corner_radius=8, **kw)
@@ -121,13 +138,16 @@ class FileRow(ctk.CTkFrame):
                       command=lambda: on_remove(self)).grid(row=0, column=4, padx=(0, 6))
 
 
-class App(ctk.CTk):
+class App(TkinterDnD.Tk):
     def __init__(self):
         super().__init__()
         self.title("SimpleEncoder")
         self.geometry("860x700")
         self.minsize(700, 560)
         self.resizable(True, True)
+
+        # customtkinter 테마를 TkinterDnD.Tk 에 적용
+        ctk.set_appearance_mode("dark")
 
         self._file_rows = []
         self._proc = None
@@ -136,9 +156,6 @@ class App(ctk.CTk):
         self._drag_start_y = 0
 
         self._build_ui()
-
-        # 드롭: 윈도우 열린 후 안전하게 등록
-        self.after(500, self._setup_drop)
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
@@ -180,6 +197,10 @@ class App(ctk.CTk):
             text="동영상 파일을 여기에 드래그하거나 버튼으로 추가하세요\n(MP4, MKV, AVI, MOV, WMV 등 지원)",
             text_color="#555", font=("Segoe UI", 13))
         self._empty_lbl.grid(row=0, column=0, pady=40)
+
+        # 드롭 등록
+        self._list_outer.drop_target_register(DND_FILES)
+        self._list_outer.dnd_bind('<<Drop>>', self._on_drop)
 
         cfg = ctk.CTkFrame(self, fg_color=("#1e1e2e", "#12121f"))
         cfg.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 6))
@@ -253,38 +274,15 @@ class App(ctk.CTk):
             command=self._cancel_encode, state="disabled")
         self._cancel_btn.grid(row=0, column=1, padx=(8, 0))
 
-    # ── 드롭 (윈도우 완전히 뜬 후 0.5초 뒤 등록) ─────────────────
-    def _setup_drop(self):
-        try:
-            import ctypes
-            import ctypes.wintypes as wt
-            WM_DROPFILES = 0x0233
-            hwnd = self.winfo_id()
-            ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
-
-            def wndproc(hwnd, msg, wparam, lparam):
-                if msg == WM_DROPFILES:
-                    count = ctypes.windll.shell32.DragQueryFileW(wparam, 0xFFFFFFFF, None, 0)
-                    for i in range(count):
-                        buf = ctypes.create_unicode_buffer(260)
-                        ctypes.windll.shell32.DragQueryFileW(wparam, i, buf, 260)
-                        p = buf.value
-                        if os.path.isfile(p) and Path(p).suffix.lower() in VIDEO_EXTS:
-                            self.after(0, self._add_row, p)
-                        elif os.path.isdir(p):
-                            for f in sorted(Path(p).rglob("*")):
-                                if f.suffix.lower() in VIDEO_EXTS:
-                                    self.after(0, self._add_row, str(f))
-                    ctypes.windll.shell32.DragFinish(wparam)
-                    return 0
-                return ctypes.windll.user32.CallWindowProcW(
-                    self._old_wndproc, hwnd, msg, wparam, lparam)
-
-            WNDPROCTYPE = ctypes.WINFUNCTYPE(ctypes.c_long, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
-            self._new_wndproc = WNDPROCTYPE(wndproc)
-            self._old_wndproc = ctypes.windll.user32.SetWindowLongPtrW(hwnd, -4, self._new_wndproc)
-        except Exception:
-            pass  # 드롭 안 돼도 나머지 기능은 정상 동작
+    # ── 드롭 처리 ────────────────────────────────────────────────
+    def _on_drop(self, event):
+        for p in parse_drop_paths(event.data):
+            if os.path.isfile(p) and Path(p).suffix.lower() in VIDEO_EXTS:
+                self._add_row(p)
+            elif os.path.isdir(p):
+                for f in sorted(Path(p).rglob("*")):
+                    if f.suffix.lower() in VIDEO_EXTS:
+                        self._add_row(str(f))
 
     # ── 행 순서 드래그 ────────────────────────────────────────────
     def _drag_start(self, event, row):
@@ -505,7 +503,6 @@ class App(ctk.CTk):
         self.after(0, self._status_lbl.configure, {"text": text, "text_color": color})
 
 
-# ── 메인 ─────────────────────────────────────────────────────────
 try:
     app = App()
     app.mainloop()
