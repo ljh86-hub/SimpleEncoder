@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+import os
 
 block_cipher = None
 
@@ -20,7 +21,7 @@ a = Analysis(
         'tkinter.filedialog',
         'tkinter.messagebox',
     ],
-    hookspath=[],
+    hookspath=['.'],
     runtime_hooks=[],
     excludes=[],
     cipher=block_cipher,
@@ -41,6 +42,6 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     icon=None,
 )
