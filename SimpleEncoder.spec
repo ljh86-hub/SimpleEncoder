@@ -21,7 +21,7 @@ a = Analysis(
         'tkinter.filedialog',
         'tkinter.messagebox',
     ],
-    hookspath=['.'],
+    hookspath=[],
     runtime_hooks=[],
     excludes=[],
     cipher=block_cipher,
