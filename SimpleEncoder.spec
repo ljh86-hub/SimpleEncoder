@@ -13,6 +13,7 @@ a = Analysis(
     datas=collect_data_files('customtkinter') + collect_data_files('tkinterdnd2'),
     hiddenimports=[
         'customtkinter',
+        'tkinterdnd2',
         'PIL',
         'PIL._tkinter_finder',
         'tkinter',
