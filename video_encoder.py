@@ -140,8 +140,8 @@ class App(TkinterDnD.Tk):
         super().__init__()
         ctk.set_appearance_mode("dark")
         self.title("SimpleEncoder")
-        self.geometry("860x700")
-        self.minsize(700, 560)
+        self.geometry("860x720")
+        self.minsize(700, 580)
         self.resizable(True, True)
 
         self._file_rows = []
@@ -193,7 +193,6 @@ class App(TkinterDnD.Tk):
             text_color="#555", font=("Segoe UI", 13))
         self._empty_lbl.grid(row=0, column=0, pady=40)
 
-        # 드롭 등록
         self._list_outer.drop_target_register(DND_FILES)
         self._list_outer.dnd_bind('<<Drop>>', self._on_drop)
 
@@ -238,8 +237,27 @@ class App(TkinterDnD.Tk):
         self._desc_lbl.grid(row=3, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
         self._on_preset_change(self._preset_var.get())
 
+        # ── 반복 횟수 옵션 ──────────────────────────────────────
+        repeat_row = ctk.CTkFrame(self, fg_color=("#1e1e2e", "#12121f"))
+        repeat_row.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 6))
+        repeat_row.grid_columnconfigure(3, weight=1)
+
+        ctk.CTkLabel(repeat_row, text="각 파일 반복 횟수:",
+                     font=("Segoe UI", 11, "bold")).grid(row=0, column=0, padx=(12, 8), pady=10)
+
+        self._repeat_var = tk.StringVar(value="1")
+        repeat_entry = ctk.CTkEntry(repeat_row, textvariable=self._repeat_var,
+                                    width=60, font=("Segoe UI", 12))
+        repeat_entry.grid(row=0, column=1, pady=10)
+
+        ctk.CTkLabel(repeat_row,
+                     text="회  (예: 2 → 1,1,2,2,3,3  /  파일 합치기와 함께 사용)",
+                     text_color="#90a4ae",
+                     font=("Segoe UI", 11)).grid(row=0, column=2, padx=(8, 12), pady=10, sticky="w")
+
+        # ── 저장 위치 ──────────────────────────────────────────
         out_row = ctk.CTkFrame(self, fg_color="transparent")
-        out_row.grid(row=4, column=0, sticky="ew", padx=16, pady=2)
+        out_row.grid(row=5, column=0, sticky="ew", padx=16, pady=2)
         out_row.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(out_row, text="저장 위치:", font=("Segoe UI", 11)).grid(row=0, column=0, padx=(0, 8))
         self._out_var = ctk.StringVar(value="원본 파일과 같은 폴더")
@@ -248,15 +266,15 @@ class App(TkinterDnD.Tk):
                       command=self._choose_outdir).grid(row=0, column=2, padx=(6, 0))
 
         self._progress = ctk.CTkProgressBar(self, height=14)
-        self._progress.grid(row=5, column=0, sticky="ew", padx=16, pady=(8, 2))
+        self._progress.grid(row=6, column=0, sticky="ew", padx=16, pady=(8, 2))
         self._progress.set(0)
 
         self._status_lbl = ctk.CTkLabel(self, text="준비", text_color="#90a4ae",
                                         font=("Consolas", 11))
-        self._status_lbl.grid(row=6, column=0, padx=16, sticky="w")
+        self._status_lbl.grid(row=7, column=0, padx=16, sticky="w")
 
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
-        btn_row.grid(row=7, column=0, padx=16, pady=10, sticky="ew")
+        btn_row.grid(row=8, column=0, padx=16, pady=10, sticky="ew")
         btn_row.grid_columnconfigure(0, weight=1)
 
         self._encode_btn = ctk.CTkButton(
@@ -272,6 +290,13 @@ class App(TkinterDnD.Tk):
             fg_color="#b71c1c", hover_color="#c62828",
             command=self._cancel_encode, state="disabled")
         self._cancel_btn.grid(row=0, column=1, padx=(8, 0))
+
+    def _get_repeat_count(self):
+        try:
+            n = int(self._repeat_var.get())
+            return max(1, n)
+        except Exception:
+            return 1
 
     def _on_drop(self, event):
         for p in parse_drop_paths(event.data):
@@ -366,19 +391,22 @@ class App(TkinterDnD.Tk):
             return os.path.dirname(src_path)
         return val
 
-    def _build_ffmpeg_cmd(self, inputs, output, preset_key):
+    def _build_ffmpeg_cmd(self, inputs, output, preset_key, repeat=1):
         p = PRESETS[preset_key]
         merge = self._merge_var.get() and len(inputs) > 1
         cmd = [FFMPEG, "-y"]
+
         if merge:
             list_file = output + "_filelist.txt"
             with open(list_file, "w", encoding="utf-8") as f:
                 for fp in inputs:
-                    f.write(f"file '{fp}'\n")
+                    for _ in range(repeat):
+                        f.write(f"file '{fp}'\n")
             cmd += ["-f", "concat", "-safe", "0", "-i", list_file]
         else:
             for fp in inputs:
                 cmd += ["-i", fp]
+
         cmd += ["-c:v", p["vcodec"]]
         if p["crf"] is not None:
             cmd += ["-crf", p["crf"]]
@@ -420,6 +448,7 @@ class App(TkinterDnD.Tk):
         preset_key = self._preset_var.get()
         p = PRESETS[preset_key]
         merge = self._merge_var.get() and len(rows) > 1
+        repeat = self._get_repeat_count()
         total = 1 if merge else len(rows)
         last_out_dir = ""
         try:
@@ -428,7 +457,7 @@ class App(TkinterDnD.Tk):
                 last_out_dir = self._get_output_dir(base)
                 stem = Path(base).stem + "_merged"
                 output = os.path.join(last_out_dir, stem + p["ext"])
-                cmd = self._build_ffmpeg_cmd([r.path for r in rows], output, preset_key)
+                cmd = self._build_ffmpeg_cmd([r.path for r in rows], output, preset_key, repeat)
                 self._run_ffmpeg(cmd, 0, 1, output)
             else:
                 for i, row in enumerate(rows):
@@ -437,7 +466,26 @@ class App(TkinterDnD.Tk):
                     last_out_dir = self._get_output_dir(row.path)
                     stem = Path(row.path).stem + "_encoded"
                     output = os.path.join(last_out_dir, stem + p["ext"])
-                    cmd = self._build_ffmpeg_cmd([row.path], output, preset_key)
+                    # 단일 파일 반복은 concat으로 처리
+                    if repeat > 1:
+                        list_file = output + "_filelist.txt"
+                        with open(list_file, "w", encoding="utf-8") as f:
+                            for _ in range(repeat):
+                                f.write(f"file '{row.path}'\n")
+                        cmd = [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", list_file]
+                        pp = PRESETS[preset_key]
+                        cmd += ["-c:v", pp["vcodec"]]
+                        if pp["crf"]: cmd += ["-crf", pp["crf"]]
+                        if pp["preset"]: cmd += ["-preset", pp["preset"]]
+                        res = self._res_var.get()
+                        if res != "원본 유지": cmd += ["-vf", f"scale={res.split()[0]}"]
+                        fps = self._fps_var.get()
+                        if fps != "원본 유지": cmd += ["-r", fps]
+                        cmd += ["-c:a", pp["acodec"]]
+                        if pp["ab"]: cmd += ["-b:a", pp["ab"]]
+                        cmd.append(output)
+                    else:
+                        cmd = self._build_ffmpeg_cmd([row.path], output, preset_key, 1)
                     self._run_ffmpeg(cmd, i, total, output)
 
             if not self._cancel_flag:
