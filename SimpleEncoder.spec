@@ -10,10 +10,10 @@ a = Analysis(
         ('ffmpeg/ffmpeg.exe', '.'),
         ('ffmpeg/ffprobe.exe', '.'),
     ],
-    # tkinterdnd2는 더 이상 사용하지 않으므로 제외 (DnD 바이너리는 오탐 유발 원인)
-    datas=collect_data_files('customtkinter'),
+    datas=collect_data_files('customtkinter') + collect_data_files('tkinterdnd2'),
     hiddenimports=[
         'customtkinter',
+        'tkinterdnd2',
         'PIL',
         'PIL._tkinter_finder',
         'tkinter',
@@ -38,7 +38,7 @@ exe = EXE(
     name='SimpleEncoder',
     debug=False,
     strip=False,
-    upx=False,          # ★ UPX 비활성화: 백신 오탐(멀웨어 패킹 의심)의 주요 원인
+    upx=False,          # ★ UPX 비활성화: 백신 오탐(멀웨어 패킹 의심) 완화
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
