@@ -14,7 +14,6 @@ import json
 import sys
 import tempfile
 import traceback
-import datetime
 from pathlib import Path
 
 # ── FFmpeg 경로 ──────────────────────────────────────────────────
@@ -41,48 +40,33 @@ PRESETS = {
     "고화질 (H.265 | 저용량 권장)": {
         "vcodec": "libx265", "crf": "22", "preset": "medium",
         "acodec": "aac", "ab": "192k", "ext": ".mp4",
-        "desc": "파일 크기 down  화질 up  (H.264 대비 ~40% 절감)",
-        "tag": "H265", "est_ratio": 0.55
+        "desc": "파일 크기 down  화질 up  (H.264 대비 ~40% 절감)"
     },
     "일반 (H.264 | 호환성 최고)": {
         "vcodec": "libx264", "crf": "23", "preset": "medium",
         "acodec": "aac", "ab": "192k", "ext": ".mp4",
-        "desc": "모든 기기 플레이어 호환 / 무난한 균형",
-        "tag": "H264", "est_ratio": 0.80
+        "desc": "모든 기기 플레이어 호환 / 무난한 균형"
     },
     "웹 최적화 (H.264 FastStart)": {
         "vcodec": "libx264", "crf": "24", "preset": "fast",
         "acodec": "aac", "ab": "128k", "ext": ".mp4",
-        "desc": "웹 스트리밍 최적화 / 빠른 인코딩",
-        "tag": "WEB", "est_ratio": 0.65
+        "desc": "웹 스트리밍 최적화 / 빠른 인코딩"
     },
     "초저용량 (H.265 | SNS용)": {
         "vcodec": "libx265", "crf": "28", "preset": "medium",
         "acodec": "aac", "ab": "128k", "ext": ".mp4",
-        "desc": "SNS 업로드 / 용량 최소화",
-        "tag": "SNS", "est_ratio": 0.30
+        "desc": "SNS 업로드 / 용량 최소화"
     },
     "무손실 (FFV1 | 편집용)": {
         "vcodec": "ffv1", "crf": None, "preset": None,
         "acodec": "flac", "ab": None, "ext": ".mkv",
-        "desc": "화질 손실 없음 / 파일 크기 매우 큼",
-        "tag": "LOSSLESS", "est_ratio": 4.0
+        "desc": "화질 손실 없음 / 파일 크기 매우 큼"
     },
 }
 
 RESOLUTIONS = ["원본 유지", "3840x2160 (4K)", "2560x1440 (2K)", "1920x1080 (FHD)", "1280x720 (HD)", "854x480 (SD)"]
 FRAMERATES  = ["원본 유지", "60", "30", "25", "24"]
 VIDEO_EXTS  = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ts", ".m2ts"}
-
-# 해상도 → 짧은 태그 / 픽셀수
-RES_TAG = {
-    "원본 유지": "", "3840x2160 (4K)": "4K", "2560x1440 (2K)": "2K",
-    "1920x1080 (FHD)": "FHD", "1280x720 (HD)": "HD", "854x480 (SD)": "SD",
-}
-RES_PIXELS = {
-    "원본 유지": None, "3840x2160 (4K)": 3840*2160, "2560x1440 (2K)": 2560*1440,
-    "1920x1080 (FHD)": 1920*1080, "1280x720 (HD)": 1280*720, "854x480 (SD)": 854*480,
-}
 
 
 # ── 유틸 ─────────────────────────────────────────────────────────
@@ -100,6 +84,13 @@ def get_video_info(path):
         return info
     except Exception:
         return {}
+
+
+def fmt_size(mb):
+    """MB 숫자를 보기 좋은 단위로"""
+    if mb >= 1024:
+        return f"{mb/1024:.2f} GB"
+    return f"{mb:.1f} MB"
 
 
 def parse_drop_paths(data):
@@ -142,8 +133,7 @@ class FileRow(ctk.CTkFrame):
 
         # 체크박스
         self.var = tk.BooleanVar(value=True)
-        ctk.CTkCheckBox(self, text="", variable=self.var, width=28,
-                        command=getattr(master, "_notify_change", lambda: None)).grid(
+        ctk.CTkCheckBox(self, text="", variable=self.var, width=28).grid(
             row=0, column=1, padx=(4, 0), pady=6)
 
         # 파일명
@@ -153,8 +143,6 @@ class FileRow(ctk.CTkFrame):
         # 정보
         info = get_video_info(path)
         self.size_mb = info.get("size_mb", 0)
-        w, h = info.get("width", 0), info.get("height", 0)
-        self.pixels = (w * h) if isinstance(w, int) and isinstance(h, int) else 0
         meta = " . ".join(filter(None, [
             f"{info.get('width','?')}x{info.get('height','?')}" if "width" in info else "",
             f"{info['size_mb']:.1f} MB" if "size_mb" in info else "",
@@ -175,8 +163,8 @@ class App(TkinterDnD.Tk):
         super().__init__()
         ctk.set_appearance_mode("dark")
         self.title("SimpleEncoder")
-        self.geometry("880x820")
-        self.minsize(720, 640)
+        self.geometry("860x740")
+        self.minsize(700, 600)
 
         self._file_rows = []
         self._proc = None
@@ -224,8 +212,6 @@ class App(TkinterDnD.Tk):
         self._scroll = ctk.CTkScrollableFrame(list_outer, fg_color="transparent", label_text="")
         self._scroll.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
         self._scroll.grid_columnconfigure(0, weight=1)
-        # FileRow 체크박스가 변경 알림을 호출할 수 있도록 연결
-        self._scroll._notify_change = self._notify_change
 
         self._empty_lbl = ctk.CTkLabel(
             self._scroll,
@@ -254,16 +240,14 @@ class App(TkinterDnD.Tk):
         ctk.CTkLabel(cfg, text="해상도", font=("Segoe UI", 11, "bold")).grid(
             row=0, column=1, padx=8, pady=(10, 2), sticky="w")
         self._res_var = ctk.StringVar(value=RESOLUTIONS[0])
-        ctk.CTkOptionMenu(cfg, variable=self._res_var, values=RESOLUTIONS, width=180,
-                          command=lambda _: self._notify_change()).grid(
+        ctk.CTkOptionMenu(cfg, variable=self._res_var, values=RESOLUTIONS, width=180).grid(
             row=1, column=1, padx=8, pady=(0, 10), sticky="ew")
 
         # 프레임레이트
         ctk.CTkLabel(cfg, text="프레임레이트", font=("Segoe UI", 11, "bold")).grid(
             row=0, column=2, padx=8, pady=(10, 2), sticky="w")
         self._fps_var = ctk.StringVar(value=FRAMERATES[0])
-        ctk.CTkOptionMenu(cfg, variable=self._fps_var, values=FRAMERATES, width=130,
-                          command=lambda _: self._notify_change()).grid(
+        ctk.CTkOptionMenu(cfg, variable=self._fps_var, values=FRAMERATES, width=130).grid(
             row=1, column=2, padx=8, pady=(0, 10), sticky="ew")
 
         # 옵션
@@ -280,12 +264,7 @@ class App(TkinterDnD.Tk):
         # 프리셋 설명
         self._desc_lbl = ctk.CTkLabel(cfg, text="", text_color="#90a4ae",
                                       font=("Segoe UI", 11), wraplength=800)
-        self._desc_lbl.grid(row=3, column=0, columnspan=4, padx=12, pady=(0, 2), sticky="w")
-
-        # 예상 용량
-        self._est_lbl = ctk.CTkLabel(cfg, text="", text_color="#4fc3f7",
-                                     font=("Consolas", 12, "bold"))
-        self._est_lbl.grid(row=4, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
+        self._desc_lbl.grid(row=3, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
         self._on_preset_change(self._preset_var.get())
 
         # ── 반복 횟수 (-, 숫자, + 딱 붙게) ─────────────────────
@@ -321,42 +300,17 @@ class App(TkinterDnD.Tk):
                      text_color="#90a4ae",
                      font=("Segoe UI", 11)).pack(side="left", padx=(12, 12), pady=10)
 
-        # ── 파일명 형식 (토큰 템플릿) ─────────────────────────────
-        name_box = ctk.CTkFrame(self, fg_color=("#1e1e2e", "#12121f"))
-        name_box.grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 6))
-        name_box.grid_columnconfigure(0, weight=1)
-
-        # 첫 줄: 라벨 + 입력창
-        nrow = ctk.CTkFrame(name_box, fg_color="transparent")
-        nrow.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
-        nrow.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(nrow, text="파일명 형식:",
-                     font=("Segoe UI", 11, "bold")).grid(row=0, column=0, padx=(0, 8))
-        self._name_var = ctk.StringVar(value="{name}_{preset}")
-        self._name_entry = ctk.CTkEntry(nrow, textvariable=self._name_var,
-                                        font=("Consolas", 12))
-        self._name_entry.grid(row=0, column=1, sticky="ew")
-        self._name_var.trace_add("write", lambda *_: self._update_preview())
-
-        # 둘째 줄: 토큰 버튼들
-        trow = ctk.CTkFrame(name_box, fg_color="transparent")
-        trow.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
-        tokens = [
-            ("원본명", "{name}"), ("프리셋", "{preset}"), ("해상도", "{res}"),
-            ("FPS", "{fps}"), ("날짜", "{date}"), ("번호", "{n}"),
-        ]
-        ctk.CTkLabel(trow, text="삽입:", text_color="#90a4ae",
-                     font=("Segoe UI", 10)).pack(side="left", padx=(0, 6))
-        for label, tok in tokens:
-            ctk.CTkButton(trow, text=f"+{label}", width=64, height=26,
-                          font=("Segoe UI", 10),
-                          fg_color="#37474f", hover_color="#546e7a",
-                          command=lambda t=tok: self._insert_token(t)).pack(side="left", padx=2)
-
-        # 셋째 줄: 미리보기
-        self._preview_lbl = ctk.CTkLabel(name_box, text="", text_color="#81d4fa",
-                                         font=("Consolas", 11), anchor="w")
-        self._preview_lbl.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 10))
+        # ── 출력 파일명 접미사 ────────────────────────────────────
+        suffix_row = ctk.CTkFrame(self, fg_color="transparent")
+        suffix_row.grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 2))
+        suffix_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(suffix_row, text="파일명 접미사:",
+                     font=("Segoe UI", 11)).grid(row=0, column=0, padx=(0, 8))
+        self._suffix_var = ctk.StringVar(value="_encoded")
+        ctk.CTkEntry(suffix_row, textvariable=self._suffix_var,
+                     placeholder_text="예: _encoded, _h265").grid(row=0, column=1, sticky="ew")
+        ctk.CTkLabel(suffix_row, text="원본명 + 접미사 (같은 이름 있으면 _1, _2 자동)",
+                     text_color="#666", font=("Segoe UI", 10)).grid(row=0, column=2, padx=(8, 0))
 
         # 저장 위치
         out_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -396,110 +350,6 @@ class App(TkinterDnD.Tk):
             fg_color="#b71c1c", hover_color="#c62828",
             command=self._cancel_encode, state="disabled")
         self._cancel_btn.grid(row=0, column=1, padx=(8, 0))
-
-        self._update_preview()
-
-    # ── 변경 알림 (예상용량 + 미리보기 동시 갱신) ───────────────────
-    def _notify_change(self):
-        self._update_estimate()
-        self._update_preview()
-
-    # ── 네이밍 템플릿 ─────────────────────────────────────────────
-    def _insert_token(self, token):
-        """입력창 커서 위치에 토큰 삽입"""
-        try:
-            pos = self._name_entry.index("insert")
-        except Exception:
-            pos = len(self._name_var.get())
-        cur = self._name_var.get()
-        self._name_var.set(cur[:pos] + token + cur[pos:])
-        self._name_entry.focus_set()
-
-    def _render_name(self, src_path, index=1):
-        """템플릿 → 실제 파일명(확장자 제외). {n}은 index로 치환."""
-        preset_key = self._preset_var.get()
-        p = PRESETS[preset_key]
-        res = self._res_var.get()
-        fps = self._fps_var.get()
-
-        repl = {
-            "{name}":   Path(src_path).stem,
-            "{preset}": p.get("tag", ""),
-            "{res}":    RES_TAG.get(res, "") or "원본",
-            "{fps}":    (fps if fps != "원본 유지" else "원본"),
-            "{date}":   datetime.datetime.now().strftime("%Y%m%d"),
-            "{n}":      str(index),
-        }
-        out = self._name_var.get().strip() or "{name}_encoded"
-        for k, v in repl.items():
-            out = out.replace(k, v)
-
-        # 파일명에 못 쓰는 문자 제거
-        out = re.sub(r'[\\/:*?"<>|]', "_", out)
-        # 연속 언더스코어 정리 + 양끝 정리
-        out = re.sub(r"_+", "_", out).strip("_ ")
-        return out or "output"
-
-    def _unique_path(self, out_dir, stem, ext):
-        """덮어쓰기 방지: 같은 이름 있으면 _1, _2... 자동 증가"""
-        candidate = os.path.join(out_dir, stem + ext)
-        if not os.path.exists(candidate):
-            return candidate
-        i = 1
-        while True:
-            candidate = os.path.join(out_dir, f"{stem}_{i}{ext}")
-            if not os.path.exists(candidate):
-                return candidate
-            i += 1
-
-    def _update_preview(self):
-        """미리보기 라벨 갱신"""
-        if not hasattr(self, "_preview_lbl"):
-            return
-        ext = PRESETS[self._preset_var.get()]["ext"]
-        sample = self._file_rows[0].path if self._file_rows else "예시영상.mp4"
-        try:
-            name = self._render_name(sample, index=1)
-            self._preview_lbl.configure(
-                text=f"미리보기:  {name}{ext}", text_color="#81d4fa")
-        except Exception:
-            self._preview_lbl.configure(
-                text="미리보기: (형식 오류)", text_color="#ef5350")
-
-    # ── 예상 용량 ─────────────────────────────────────────────────
-    def _update_estimate(self):
-        if not hasattr(self, "_est_lbl"):
-            return
-        rows = [r for r in self._file_rows if r.var.get()]
-        total_src = sum(r.size_mb for r in rows)
-        if total_src <= 0:
-            self._est_lbl.configure(text="")
-            return
-        p = PRESETS[self._preset_var.get()]
-        ratio = p.get("est_ratio", 1.0)
-        target_px = RES_PIXELS.get(self._res_var.get())
-        if target_px:
-            scaled = []
-            for r in rows:
-                if r.pixels and target_px < r.pixels:
-                    scaled.append(target_px / r.pixels)
-                else:
-                    scaled.append(1.0)
-            if scaled:
-                ratio *= sum(scaled) / len(scaled)
-        est = total_src * ratio
-        diff = (1 - est / total_src) * 100
-
-        def fmt(mb):
-            return f"{mb/1024:.2f} GB" if mb >= 1024 else f"{mb:.1f} MB"
-
-        if diff >= 0:
-            trend, color = f"약 {diff:.0f}% 절감 down", "#4caf50"
-        else:
-            trend, color = f"약 {-diff:.0f}% 증가 up", "#ff9800"
-        self._est_lbl.configure(
-            text=f"  예상 용량: {fmt(total_src)} -> 약 {fmt(est)}  ({trend})",
-            text_color=color)
 
     # ── 반복 +/- ─────────────────────────────────────────────────
     def _increase_repeat(self):
@@ -571,7 +421,6 @@ class App(TkinterDnD.Tk):
                       on_drag_end=self._drag_end)
         row.grid(row=len(self._file_rows), column=0, sticky="ew", pady=2, padx=4)
         self._file_rows.append(row)
-        self._notify_change()
 
     def _remove_row(self, row):
         row.destroy()
@@ -579,14 +428,12 @@ class App(TkinterDnD.Tk):
         self._refresh_grid()
         if not self._file_rows:
             self._empty_lbl.grid()
-        self._notify_change()
 
     def _clear_list(self):
         for r in self._file_rows:
             r.destroy()
         self._file_rows.clear()
         self._empty_lbl.grid()
-        self._notify_change()
 
     def _choose_outdir(self):
         d = filedialog.askdirectory(title="저장 폴더 선택")
@@ -595,7 +442,26 @@ class App(TkinterDnD.Tk):
 
     def _on_preset_change(self, val):
         self._desc_lbl.configure(text=f"  {PRESETS.get(val, {}).get('desc', '')}")
-        self._notify_change()
+
+    # ── 네이밍 ────────────────────────────────────────────────────
+    def _build_stem(self, src_path, extra=""):
+        """원본명 + 접미사(+extra). 금지문자 정리."""
+        suffix = self._suffix_var.get().strip()
+        stem = Path(src_path).stem + suffix + extra
+        stem = re.sub(r'[\\/:*?"<>|]', "_", stem)
+        return stem or "output"
+
+    def _unique_path(self, out_dir, stem, ext):
+        """덮어쓰기 방지: 같은 이름 있으면 _1, _2... 자동 증가"""
+        candidate = os.path.join(out_dir, stem + ext)
+        if not os.path.exists(candidate):
+            return candidate
+        i = 1
+        while True:
+            candidate = os.path.join(out_dir, f"{stem}_{i}{ext}")
+            if not os.path.exists(candidate):
+                return candidate
+            i += 1
 
     # ── 인코딩 ───────────────────────────────────────────────────
     def _get_output_dir(self, src_path):
@@ -656,12 +522,14 @@ class App(TkinterDnD.Tk):
         repeat = self._repeat_count
         temp_files = []
         last_out_dir = ""
+        src_total = 0.0   # 원본 합계(MB)
+        out_total = 0.0   # 결과 합계(MB)
 
         try:
             if merge:
                 base = rows[0].path
                 last_out_dir = self._get_output_dir(base)
-                stem = self._render_name(base, index=1) + "_merged"
+                stem = self._build_stem(base, extra="_merged")
                 output = self._unique_path(last_out_dir, stem, ext)
 
                 list_file = self._make_filelist([r.path for r in rows], repeat)
@@ -671,12 +539,15 @@ class App(TkinterDnD.Tk):
                 self._apply_encode_args(cmd, preset_key)
                 cmd.append(output)
                 self._run_ffmpeg(cmd, 0, 1, output)
+
+                src_total = sum(r.size_mb for r in rows) * repeat
+                out_total = self._file_size_mb(output)
             else:
                 for i, row in enumerate(rows):
                     if self._cancel_flag:
                         break
                     last_out_dir = self._get_output_dir(row.path)
-                    stem = self._render_name(row.path, index=i + 1)
+                    stem = self._build_stem(row.path)
                     output = self._unique_path(last_out_dir, stem, ext)
 
                     if repeat > 1:
@@ -690,8 +561,11 @@ class App(TkinterDnD.Tk):
                     cmd.append(output)
                     self._run_ffmpeg(cmd, i, len(rows), output)
 
+                    src_total += row.size_mb * (repeat if repeat > 1 else 1)
+                    out_total += self._file_size_mb(output)
+
             if not self._cancel_flag:
-                self.after(0, self._on_encode_done, last_out_dir)
+                self.after(0, self._on_encode_done, last_out_dir, src_total, out_total)
         except Exception as e:
             self._set_status(f"오류: {e}", "#ef5350")
             self.after(0, self._reset_buttons)
@@ -702,10 +576,25 @@ class App(TkinterDnD.Tk):
                 except Exception:
                     pass
 
-    def _on_encode_done(self, out_dir):
+    def _file_size_mb(self, path):
+        try:
+            return os.path.getsize(path) / 1024 / 1024
+        except Exception:
+            return 0.0
+
+    def _on_encode_done(self, out_dir, src_total, out_total):
         self._reset_buttons()
         self._progress.set(1.0)
-        self._status_lbl.configure(text="✓ 인코딩 완료!", text_color="#4caf50")
+
+        # 실제 절감 결과 표시
+        if src_total > 0 and out_total > 0:
+            saved = (1 - out_total / src_total) * 100
+            self._status_lbl.configure(
+                text=f"✓ 완료!  {fmt_size(src_total)} → {fmt_size(out_total)}  ({saved:.0f}% 절감)",
+                text_color="#4caf50")
+        else:
+            self._status_lbl.configure(text="✓ 인코딩 완료!", text_color="#4caf50")
+
         if self._open_folder_var.get() and out_dir and os.path.isdir(out_dir):
             try:
                 os.startfile(out_dir)

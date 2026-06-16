@@ -28,19 +28,28 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# ── onedir 빌드: EXE(실행기) + COLLECT(폴더로 묶기) ──
+# onefile과 달리 매 실행마다 압축 해제가 없어 시작 속도가 빠름
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
+    [],                 # ← onefile과 달리 binaries/datas를 여기 넣지 않음
+    exclude_binaries=True,
     name='SimpleEncoder',
     debug=False,
     strip=False,
-    upx=False,          # ★ UPX 비활성화: 백신 오탐(멀웨어 패킹 의심) 완화
-    upx_exclude=[],
-    runtime_tmpdir=None,
+    upx=False,          # 백신 오탐 완화
     console=False,
     icon='SimpleEncoder.ico',
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='SimpleEncoder',   # → dist/SimpleEncoder/ 폴더 생성
 )
