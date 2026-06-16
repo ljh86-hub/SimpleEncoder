@@ -1,4 +1,4 @@
-name: Build SimpleEncoder.exe
+name: Build SimpleEncoder (onedir)
 
 on:
   push:
@@ -34,11 +34,16 @@ jobs:
           Copy-Item $ffprobe.FullName "ffmpeg\ffprobe.exe"
         shell: powershell
 
-      - name: Build exe
+      - name: Build (onedir)
         run: python -m PyInstaller SimpleEncoder.spec --noconfirm --clean
+
+      - name: Zip the folder
+        run: |
+          Compress-Archive -Path "dist\SimpleEncoder\*" -DestinationPath "SimpleEncoder.zip" -Force
+        shell: powershell
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SimpleEncoder
-          path: dist/SimpleEncoder.exe
+          path: SimpleEncoder.zip
