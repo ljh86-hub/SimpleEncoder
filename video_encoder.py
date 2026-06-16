@@ -11,9 +11,60 @@ from tkinter import filedialog, messagebox
 import subprocess
 import threading
 import os
+import sys
 import re
 import json
+import shutil
 from pathlib import Path
+
+
+# ── FFmpeg / FFprobe 경로 탐색 ──────────────────────────────────
+def _resource_dir() -> str:
+    """PyInstaller 번들 시 임시 추출 폴더, 아니면 스크립트 폴더"""
+    if hasattr(sys, "_MEIPASS"):
+        return sys._MEIPASS  # type: ignore[attr-defined]
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _find_binary(name: str) -> str:
+    """
+    name: 'ffmpeg' 또는 'ffprobe'
+    탐색 순서:
+      1) EXE에 포함된(번들) 바이너리  (sys._MEIPASS)
+      2) 실행 파일과 같은 폴더
+      3) 시스템 PATH
+    하나도 없으면 그냥 이름만 반환(마지막에 PATH 시도)
+    """
+    exe = name + (".exe" if os.name == "nt" else "")
+
+    # 1) 번들 폴더
+    bundled = os.path.join(_resource_dir(), exe)
+    if os.path.isfile(bundled):
+        return bundled
+
+    # 2) 실행 파일 옆 (exe 배포 시 frozen, 아니면 스크립트 폴더)
+    if getattr(sys, "frozen", False):
+        side_dir = os.path.dirname(sys.executable)
+    else:
+        side_dir = os.path.dirname(os.path.abspath(__file__))
+    side = os.path.join(side_dir, exe)
+    if os.path.isfile(side):
+        return side
+
+    # 3) 시스템 PATH
+    found = shutil.which(name)
+    if found:
+        return found
+
+    return name  # 최후의 보루
+
+
+FFMPEG  = _find_binary("ffmpeg")
+FFPROBE = _find_binary("ffprobe")
+
+# 콘솔창 깜빡임 방지(Windows, --noconsole 빌드 시 자식 프로세스 콘솔 숨김)
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
 
 # ── 테마 설정 ──────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -71,13 +122,14 @@ FRAMERATES  = ["원본 유지", "60", "30", "25", "24"]
 def get_video_info(path: str) -> dict:
     """FFprobe로 영상 정보 추출"""
     cmd = [
-        "ffprobe", "-v", "quiet",
+        FFPROBE, "-v", "quiet",
         "-print_format", "json",
         "-show_format", "-show_streams",
         path
     ]
     try:
-        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL,
+                                      creationflags=_NO_WINDOW)
         data = json.loads(out)
         info = {}
         fmt = data.get("format", {})
@@ -426,7 +478,7 @@ class App(ctk.CTk):
         p = PRESETS[preset_key]
         merge = self._merge_var.get() and len(inputs) > 1
 
-        cmd = ["ffmpeg", "-y"]
+        cmd = [FFMPEG, "-y"]
 
         if merge:
             # concat demuxer 사용
@@ -481,11 +533,16 @@ class App(ctk.CTk):
 
         # FFmpeg 확인
         try:
-            subprocess.check_output(["ffmpeg", "-version"], stderr=subprocess.DEVNULL)
-        except FileNotFoundError:
+            subprocess.check_output([FFMPEG, "-version"],
+                                    stderr=subprocess.DEVNULL,
+                                    creationflags=_NO_WINDOW)
+        except (FileNotFoundError, OSError):
             messagebox.showerror(
                 "FFmpeg 없음",
-                "FFmpeg이 설치되지 않았습니다.\n\nhttps://ffmpeg.org 에서 다운로드 후\n시스템 PATH에 추가해 주세요.")
+                "FFmpeg을 찾을 수 없습니다.\n\n"
+                "EXE 배포본이라면 ffmpeg.exe가 포함되어야 하고,\n"
+                "스크립트 실행이라면 시스템 PATH에 FFmpeg을 추가하거나\n"
+                "video_encoder.py와 같은 폴더에 ffmpeg.exe를 두세요.")
             return
 
         self._encode_btn.configure(state="disabled")
@@ -547,7 +604,8 @@ class App(ctk.CTk):
             stderr=subprocess.PIPE,
             universal_newlines=True,
             encoding="utf-8",
-            errors="replace"
+            errors="replace",
+            creationflags=_NO_WINDOW
         )
 
         time_pattern = re.compile(r"time=(\d+):(\d+):([\d.]+)")
