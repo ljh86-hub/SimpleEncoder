@@ -35,25 +35,57 @@ HIDE_KWARGS = {"startupinfo": SI, "creationflags": subprocess.CREATE_NO_WINDOW}
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+# ── 색상 팔레트 (다크 + 시안 네온 포인트) ─────────────────────────
+class C:
+    BG_HEADER   = "#1a1a2e"   # 헤더
+    BG_CARD     = "#12121f"   # 설정 카드
+    BG_LIST     = "#161616"   # 파일 목록 영역
+    BG_ROW      = "#1e1e2e"   # 파일 행
+    BG_ROW_DRAG = "#2a2a4a"   # 드래그 중 행
+    BG_INPUT    = "#1e1e2e"   # 입력창/숫자칸
+    BG_NUM      = "#0f0f1a"   # 반복 숫자 박스
+
+    ACCENT      = "#4fc3f7"   # 시안 포인트 (강조)
+    ACCENT_DIM  = "#cfe6f5"   # 옅은 시안 텍스트
+    PRIMARY     = "#1565c0"   # 주 액션 버튼
+    PRIMARY_HL  = "#1976d2"   # 주 버튼 hover
+    PRESET_BG   = "#1f2a44"   # 프리셋 강조 박스
+
+    NEUTRAL     = "#2a3138"   # 보조 버튼
+    NEUTRAL_HL  = "#3a444d"   # 보조 버튼 hover
+    DANGER      = "#b71c1c"
+    DANGER_HL   = "#c62828"
+
+    OK_BG       = "#0f1a12"   # 완료 배너 배경
+    OK_FG       = "#7fd88a"   # 완료 텍스트
+    OK_LINE     = "#4caf50"   # 완료 강조선
+
+    TXT         = "#dfe4e8"   # 기본 텍스트
+    TXT_MUTED   = "#8a96a0"   # 흐린 텍스트
+    TXT_HINT    = "#5a6570"   # 더 흐린 힌트
+    TXT_META    = "#6b7680"   # 파일 정보
+    BORDER      = "#2a3138"   # 테두리
+    DROP_BORDER = "#38465a"   # 드롭 영역 테두리
+
 # ── 프리셋 ───────────────────────────────────────────────────────
 PRESETS = {
     "고화질 (H.265 | 저용량 권장)": {
-        "vcodec": "libx265", "crf": "22", "preset": "medium",
+        "vcodec": "libx265", "crf": "22", "preset": "faster",
         "acodec": "aac", "ab": "192k", "ext": ".mp4",
-        "desc": "파일 크기 down  화질 up  (H.264 대비 ~40% 절감)"
+        "desc": "파일 크기 down  화질 up  (H.264 대비 ~40% 절감 / 속도 개선)"
     },
     "일반 (H.264 | 호환성 최고)": {
-        "vcodec": "libx264", "crf": "23", "preset": "medium",
+        "vcodec": "libx264", "crf": "23", "preset": "faster",
         "acodec": "aac", "ab": "192k", "ext": ".mp4",
-        "desc": "모든 기기 플레이어 호환 / 무난한 균형"
+        "desc": "모든 기기 플레이어 호환 / 빠르고 무난한 균형"
     },
     "웹 최적화 (H.264 FastStart)": {
-        "vcodec": "libx264", "crf": "24", "preset": "fast",
+        "vcodec": "libx264", "crf": "24", "preset": "veryfast",
         "acodec": "aac", "ab": "128k", "ext": ".mp4",
-        "desc": "웹 스트리밍 최적화 / 빠른 인코딩"
+        "desc": "웹 스트리밍 최적화 / 가장 빠른 인코딩"
     },
     "초저용량 (H.265 | SNS용)": {
-        "vcodec": "libx265", "crf": "28", "preset": "medium",
+        "vcodec": "libx265", "crf": "28", "preset": "faster",
         "acodec": "aac", "ab": "128k", "ext": ".mp4",
         "desc": "SNS 업로드 / 용량 최소화"
     },
@@ -119,41 +151,43 @@ def collect_videos_from_path(p):
 # ── 파일 행 ──────────────────────────────────────────────────────
 class FileRow(ctk.CTkFrame):
     def __init__(self, master, path, on_remove, on_drag_start, on_drag_motion, on_drag_end, **kw):
-        super().__init__(master, fg_color=("#2b2b2b", "#1e1e1e"), corner_radius=8, **kw)
+        super().__init__(master, fg_color=C.BG_ROW, corner_radius=7, **kw)
         self.path = path
         self.grid_columnconfigure(2, weight=1)
 
         # 드래그 핸들
-        handle = ctk.CTkLabel(self, text="=", font=("Consolas", 18),
-                              text_color="#666", cursor="fleur", width=24)
-        handle.grid(row=0, column=0, padx=(6, 0), pady=6)
+        handle = ctk.CTkLabel(self, text="⠿", font=("Consolas", 16),
+                              text_color="#566", cursor="fleur", width=24)
+        handle.grid(row=0, column=0, padx=(8, 0), pady=7)
         handle.bind("<ButtonPress-1>",   lambda e: on_drag_start(e, self))
         handle.bind("<B1-Motion>",       lambda e: on_drag_motion(e, self))
         handle.bind("<ButtonRelease-1>", lambda e: on_drag_end(e, self))
 
         # 체크박스
         self.var = tk.BooleanVar(value=True)
-        ctk.CTkCheckBox(self, text="", variable=self.var, width=28).grid(
+        ctk.CTkCheckBox(self, text="", variable=self.var, width=28,
+                        fg_color=C.PRIMARY, hover_color=C.PRIMARY_HL).grid(
             row=0, column=1, padx=(4, 0), pady=6)
 
         # 파일명
         ctk.CTkLabel(self, text=os.path.basename(path), anchor="w",
+                     text_color=C.TXT,
                      font=("Consolas", 12)).grid(row=0, column=2, sticky="ew", padx=8)
 
         # 정보
         info = get_video_info(path)
         self.size_mb = info.get("size_mb", 0)
-        meta = " . ".join(filter(None, [
+        meta = " · ".join(filter(None, [
             f"{info.get('width','?')}x{info.get('height','?')}" if "width" in info else "",
             f"{info['size_mb']:.1f} MB" if "size_mb" in info else "",
         ]))
         if meta:
-            ctk.CTkLabel(self, text=meta, text_color="#666",
+            ctk.CTkLabel(self, text=meta, text_color=C.TXT_META,
                          font=("Consolas", 11)).grid(row=0, column=3, padx=8)
 
         # 삭제 버튼
-        ctk.CTkButton(self, text="X", width=28, height=28,
-                      fg_color="transparent", hover_color="#c0392b",
+        ctk.CTkButton(self, text="✕", width=28, height=28,
+                      fg_color="transparent", hover_color=C.DANGER_HL,
                       command=lambda: on_remove(self)).grid(row=0, column=4, padx=(0, 6))
 
 
@@ -163,8 +197,8 @@ class App(TkinterDnD.Tk):
         super().__init__()
         ctk.set_appearance_mode("dark")
         self.title("SimpleEncoder")
-        self.geometry("860x740")
-        self.minsize(700, 600)
+        self.geometry("880x780")
+        self.minsize(720, 620)
 
         self._file_rows = []
         self._proc = None
@@ -181,30 +215,44 @@ class App(TkinterDnD.Tk):
         self.grid_rowconfigure(2, weight=1)
 
         # 헤더
-        hdr = ctk.CTkFrame(self, fg_color=("#1a1a2e", "#0f0f1a"), corner_radius=0)
+        hdr = ctk.CTkFrame(self, fg_color=C.BG_HEADER, corner_radius=0, height=58)
         hdr.grid(row=0, column=0, sticky="ew")
-        ctk.CTkLabel(hdr, text="SimpleEncoder",
-                     font=("Segoe UI", 22, "bold"),
-                     text_color="#4fc3f7").pack(side="left", padx=20, pady=14)
-        ctk.CTkLabel(hdr, text="FFmpeg 기반 고화질 저용량 인코더",
-                     font=("Segoe UI", 11),
-                     text_color="#90a4ae").pack(side="left", pady=14)
+        hdr.grid_propagate(False)
+
+        # 아이콘 배지
+        badge = ctk.CTkFrame(hdr, fg_color="#16364a", corner_radius=8, width=34, height=34)
+        badge.pack(side="left", padx=(18, 10), pady=12)
+        badge.pack_propagate(False)
+        ctk.CTkLabel(badge, text="⚡", font=("Segoe UI", 18),
+                     text_color=C.ACCENT).pack(expand=True)
+
+        title_box = ctk.CTkFrame(hdr, fg_color="transparent")
+        title_box.pack(side="left", pady=10)
+        ctk.CTkLabel(title_box, text="SimpleEncoder",
+                     font=("Segoe UI", 18, "bold"),
+                     text_color=C.ACCENT).pack(anchor="w")
+        ctk.CTkLabel(title_box, text="고화질 저용량 인코더",
+                     font=("Segoe UI", 10),
+                     text_color="#7a8a99").pack(anchor="w")
 
         # 파일 추가 버튼 행
         top = ctk.CTkFrame(self, fg_color="transparent")
         top.grid(row=1, column=0, sticky="ew", padx=16, pady=(12, 0))
         top.grid_columnconfigure(1, weight=1)
-        ctk.CTkButton(top, text="+ 파일 추가", width=120,
+        ctk.CTkButton(top, text="＋ 파일 추가", width=120, corner_radius=7,
+                      fg_color=C.PRIMARY, hover_color=C.PRIMARY_HL,
                       command=self._add_files).grid(row=0, column=0, padx=(0, 8))
-        ctk.CTkButton(top, text="폴더 추가", width=100,
-                      fg_color="#37474f", hover_color="#546e7a",
+        ctk.CTkButton(top, text="폴더 추가", width=100, corner_radius=7,
+                      fg_color=C.NEUTRAL, hover_color=C.NEUTRAL_HL,
                       command=self._add_folder).grid(row=0, column=1, sticky="w")
-        ctk.CTkButton(top, text="목록 초기화", width=100,
-                      fg_color="#37474f", hover_color="#c0392b",
+        ctk.CTkButton(top, text="목록 초기화", width=100, corner_radius=7,
+                      fg_color=C.NEUTRAL, hover_color=C.DANGER_HL,
                       command=self._clear_list).grid(row=0, column=2)
 
-        # 파일 목록
-        list_outer = ctk.CTkFrame(self, fg_color=("#1c1c1c", "#161616"))
+        # 파일 목록 (드롭 영역 — 색 테두리로 표시)
+        list_outer = ctk.CTkFrame(self, fg_color=C.BG_LIST,
+                                  border_width=2, border_color=C.DROP_BORDER,
+                                  corner_radius=10)
         list_outer.grid(row=2, column=0, sticky="nsew", padx=16, pady=8)
         list_outer.grid_rowconfigure(0, weight=1)
         list_outer.grid_columnconfigure(0, weight=1)
@@ -215,89 +263,104 @@ class App(TkinterDnD.Tk):
 
         self._empty_lbl = ctk.CTkLabel(
             self._scroll,
-            text="동영상 파일을 여기에 드래그하거나 버튼으로 추가하세요\n(MP4, MKV, AVI, MOV, WMV 등 지원)",
-            text_color="#555", font=("Segoe UI", 13))
-        self._empty_lbl.grid(row=0, column=0, pady=40)
+            text="⤓\n\n동영상 파일을 여기에 끌어다 놓으세요\n또는 위의 '파일 추가' 버튼 사용\n\nMP4 · MKV · AVI · MOV · WMV 등 지원",
+            text_color=C.TXT_HINT, font=("Segoe UI", 13), justify="center")
+        self._empty_lbl.grid(row=0, column=0, pady=36)
 
         list_outer.drop_target_register(DND_FILES)
         list_outer.dnd_bind('<<Drop>>', self._on_drop)
 
         # 설정 패널
-        cfg = ctk.CTkFrame(self, fg_color=("#1e1e2e", "#12121f"))
+        cfg = ctk.CTkFrame(self, fg_color=C.BG_CARD, corner_radius=9)
         cfg.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 6))
         cfg.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
-        # 프리셋
-        ctk.CTkLabel(cfg, text="인코딩 프리셋", font=("Segoe UI", 11, "bold")).grid(
+        # 프리셋 (시안 강조 — 가장 중요한 선택)
+        ctk.CTkLabel(cfg, text="인코딩 프리셋", font=("Segoe UI", 11, "bold"),
+                     text_color=C.TXT_MUTED).grid(
             row=0, column=0, padx=12, pady=(10, 2), sticky="w")
         self._preset_var = ctk.StringVar(value=list(PRESETS.keys())[0])
         ctk.CTkOptionMenu(cfg, variable=self._preset_var,
                           values=list(PRESETS.keys()),
-                          command=self._on_preset_change, width=220).grid(
+                          command=self._on_preset_change, width=220,
+                          fg_color=C.PRESET_BG, button_color=C.PRIMARY,
+                          button_hover_color=C.PRIMARY_HL,
+                          text_color=C.ACCENT_DIM, corner_radius=6).grid(
             row=1, column=0, padx=12, pady=(0, 10), sticky="ew")
 
         # 해상도
-        ctk.CTkLabel(cfg, text="해상도", font=("Segoe UI", 11, "bold")).grid(
+        ctk.CTkLabel(cfg, text="해상도", font=("Segoe UI", 11, "bold"),
+                     text_color=C.TXT_MUTED).grid(
             row=0, column=1, padx=8, pady=(10, 2), sticky="w")
         self._res_var = ctk.StringVar(value=RESOLUTIONS[0])
-        ctk.CTkOptionMenu(cfg, variable=self._res_var, values=RESOLUTIONS, width=180).grid(
+        ctk.CTkOptionMenu(cfg, variable=self._res_var, values=RESOLUTIONS, width=180,
+                          fg_color=C.NEUTRAL, button_color=C.NEUTRAL,
+                          button_hover_color=C.NEUTRAL_HL, corner_radius=6).grid(
             row=1, column=1, padx=8, pady=(0, 10), sticky="ew")
 
         # 프레임레이트
-        ctk.CTkLabel(cfg, text="프레임레이트", font=("Segoe UI", 11, "bold")).grid(
+        ctk.CTkLabel(cfg, text="프레임레이트", font=("Segoe UI", 11, "bold"),
+                     text_color=C.TXT_MUTED).grid(
             row=0, column=2, padx=8, pady=(10, 2), sticky="w")
         self._fps_var = ctk.StringVar(value=FRAMERATES[0])
-        ctk.CTkOptionMenu(cfg, variable=self._fps_var, values=FRAMERATES, width=130).grid(
+        ctk.CTkOptionMenu(cfg, variable=self._fps_var, values=FRAMERATES, width=130,
+                          fg_color=C.NEUTRAL, button_color=C.NEUTRAL,
+                          button_hover_color=C.NEUTRAL_HL, corner_radius=6).grid(
             row=1, column=2, padx=8, pady=(0, 10), sticky="ew")
 
         # 옵션
-        ctk.CTkLabel(cfg, text="옵션", font=("Segoe UI", 11, "bold")).grid(
+        ctk.CTkLabel(cfg, text="옵션", font=("Segoe UI", 11, "bold"),
+                     text_color=C.TXT_MUTED).grid(
             row=0, column=3, padx=12, pady=(10, 2), sticky="w")
         self._merge_var = tk.BooleanVar(value=False)
-        ctk.CTkSwitch(cfg, text="파일 합치기", variable=self._merge_var).grid(
+        ctk.CTkSwitch(cfg, text="파일 합치기", variable=self._merge_var,
+                      progress_color=C.PRIMARY, font=("Segoe UI", 11)).grid(
             row=1, column=3, padx=12, pady=(0, 4), sticky="w")
         self._open_folder_var = tk.BooleanVar(value=True)
         ctk.CTkCheckBox(cfg, text="완료 후 폴더 열기", variable=self._open_folder_var,
+                        fg_color=C.PRIMARY, hover_color=C.PRIMARY_HL,
                         font=("Segoe UI", 11)).grid(
             row=2, column=3, padx=12, pady=(0, 10), sticky="w")
 
         # 프리셋 설명
-        self._desc_lbl = ctk.CTkLabel(cfg, text="", text_color="#90a4ae",
+        self._desc_lbl = ctk.CTkLabel(cfg, text="", text_color=C.TXT_MUTED,
                                       font=("Segoe UI", 11), wraplength=800)
         self._desc_lbl.grid(row=3, column=0, columnspan=4, padx=12, pady=(0, 8), sticky="w")
         self._on_preset_change(self._preset_var.get())
 
         # ── 반복 횟수 (-, 숫자, + 딱 붙게) ─────────────────────
-        repeat_row = ctk.CTkFrame(self, fg_color=("#1e1e2e", "#12121f"))
+        repeat_row = ctk.CTkFrame(self, fg_color=C.BG_CARD, corner_radius=9)
         repeat_row.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 6))
 
         ctk.CTkLabel(repeat_row, text="각 파일 반복 횟수:",
-                     font=("Segoe UI", 11, "bold")).pack(side="left", padx=(12, 12), pady=10)
+                     font=("Segoe UI", 11, "bold"),
+                     text_color=C.TXT_MUTED).pack(side="left", padx=(12, 12), pady=10)
 
         spinner = ctk.CTkFrame(repeat_row, fg_color="transparent")
         spinner.pack(side="left", pady=10)
 
         ctk.CTkButton(spinner, text="−", width=32, height=32,
                       font=("Segoe UI", 16, "bold"),
-                      fg_color="#37474f", hover_color="#546e7a",
+                      fg_color=C.NEUTRAL, hover_color=C.NEUTRAL_HL,
                       corner_radius=6,
                       command=self._decrease_repeat).pack(side="left")
 
         self._repeat_lbl = ctk.CTkLabel(spinner, text="1",
                                          font=("Segoe UI", 14, "bold"),
+                                         text_color=C.TXT,
                                          width=44, height=32,
-                                         fg_color="#0f0f1a", corner_radius=6)
+                                         fg_color=C.BG_NUM, corner_radius=6)
         self._repeat_lbl.pack(side="left", padx=2)
 
         ctk.CTkButton(spinner, text="+", width=32, height=32,
                       font=("Segoe UI", 16, "bold"),
-                      fg_color="#37474f", hover_color="#546e7a",
+                      fg_color=C.NEUTRAL, hover_color=C.NEUTRAL_HL,
                       corner_radius=6,
                       command=self._increase_repeat).pack(side="left")
 
         ctk.CTkLabel(repeat_row,
                      text="회   (예: 2회 → 1,1,2,2,3,3 / '파일 합치기'와 함께 사용)",
-                     text_color="#90a4ae",
+                     text_color=C.TXT_HINT,
                      font=("Segoe UI", 11)).pack(side="left", padx=(12, 12), pady=10)
 
         # ── 출력 파일명 접미사 ────────────────────────────────────
@@ -305,32 +368,39 @@ class App(TkinterDnD.Tk):
         suffix_row.grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 2))
         suffix_row.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(suffix_row, text="파일명 접미사:",
+                     text_color=C.TXT_MUTED,
                      font=("Segoe UI", 11)).grid(row=0, column=0, padx=(0, 8))
         self._suffix_var = ctk.StringVar(value="_encoded")
         ctk.CTkEntry(suffix_row, textvariable=self._suffix_var,
+                     fg_color=C.BG_INPUT, border_color=C.BORDER, corner_radius=6,
                      placeholder_text="예: _encoded, _h265").grid(row=0, column=1, sticky="ew")
         ctk.CTkLabel(suffix_row, text="원본명 + 접미사 (같은 이름 있으면 _1, _2 자동)",
-                     text_color="#666", font=("Segoe UI", 10)).grid(row=0, column=2, padx=(8, 0))
+                     text_color=C.TXT_HINT, font=("Segoe UI", 10)).grid(row=0, column=2, padx=(8, 0))
 
         # 저장 위치
         out_row = ctk.CTkFrame(self, fg_color="transparent")
         out_row.grid(row=6, column=0, sticky="ew", padx=16, pady=2)
         out_row.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(out_row, text="저장 위치:", font=("Segoe UI", 11)).grid(row=0, column=0, padx=(0, 8))
+        ctk.CTkLabel(out_row, text="저장 위치:", text_color=C.TXT_MUTED,
+                     font=("Segoe UI", 11)).grid(row=0, column=0, padx=(0, 8))
         self._out_var = ctk.StringVar(value="원본 파일과 같은 폴더")
-        ctk.CTkEntry(out_row, textvariable=self._out_var).grid(row=0, column=1, sticky="ew")
-        ctk.CTkButton(out_row, text="찾기", width=60,
+        ctk.CTkEntry(out_row, textvariable=self._out_var,
+                     fg_color=C.BG_INPUT, border_color=C.BORDER, corner_radius=6).grid(
+            row=0, column=1, sticky="ew")
+        ctk.CTkButton(out_row, text="찾기", width=60, corner_radius=6,
+                      fg_color=C.NEUTRAL, hover_color=C.NEUTRAL_HL,
                       command=self._choose_outdir).grid(row=0, column=2, padx=(6, 0))
 
         # 진행바
-        self._progress = ctk.CTkProgressBar(self, height=14)
+        self._progress = ctk.CTkProgressBar(self, height=14, corner_radius=7,
+                                            progress_color=C.ACCENT)
         self._progress.grid(row=7, column=0, sticky="ew", padx=16, pady=(8, 2))
         self._progress.set(0)
 
-        # 상태 표시
-        self._status_lbl = ctk.CTkLabel(self, text="준비", text_color="#90a4ae",
-                                        font=("Segoe UI", 14, "bold"))
-        self._status_lbl.grid(row=8, column=0, padx=16, pady=4, sticky="w")
+        # 상태 표시 (완료 시 초록 배너처럼 강조선 느낌)
+        self._status_lbl = ctk.CTkLabel(self, text="준비", text_color=C.TXT_MUTED,
+                                        font=("Segoe UI", 14, "bold"), anchor="w")
+        self._status_lbl.grid(row=8, column=0, padx=16, pady=4, sticky="ew")
 
         # 인코딩 버튼
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -338,16 +408,16 @@ class App(TkinterDnD.Tk):
         btn_row.grid_columnconfigure(0, weight=1)
 
         self._encode_btn = ctk.CTkButton(
-            btn_row, text="인코딩 시작", height=42,
-            font=("Segoe UI", 14, "bold"),
-            fg_color="#1565c0", hover_color="#1976d2",
+            btn_row, text="▶  인코딩 시작", height=46, corner_radius=9,
+            font=("Segoe UI", 15, "bold"),
+            fg_color=C.PRIMARY, hover_color=C.PRIMARY_HL,
             command=self._start_encode)
         self._encode_btn.grid(row=0, column=0, sticky="ew")
 
         self._cancel_btn = ctk.CTkButton(
-            btn_row, text="취소", height=42, width=100,
+            btn_row, text="취소", height=46, width=100, corner_radius=9,
             font=("Segoe UI", 14),
-            fg_color="#b71c1c", hover_color="#c62828",
+            fg_color=C.DANGER, hover_color=C.DANGER_HL,
             command=self._cancel_encode, state="disabled")
         self._cancel_btn.grid(row=0, column=1, padx=(8, 0))
 
@@ -370,7 +440,7 @@ class App(TkinterDnD.Tk):
     def _drag_start(self, event, row):
         self._drag_row = row
         self._drag_start_y = event.y_root
-        row.configure(fg_color=("#3a3a5c", "#2a2a4a"))
+        row.configure(fg_color=C.BG_ROW_DRAG)
 
     def _drag_motion(self, event, row):
         if not self._drag_row:
@@ -388,7 +458,7 @@ class App(TkinterDnD.Tk):
 
     def _drag_end(self, event, row):
         if self._drag_row:
-            self._drag_row.configure(fg_color=("#2b2b2b", "#1e1e1e"))
+            self._drag_row.configure(fg_color=C.BG_ROW)
             self._drag_row = None
 
     def _refresh_grid(self):
@@ -482,11 +552,16 @@ class App(TkinterDnD.Tk):
     def _apply_encode_args(self, cmd, preset_key):
         """공통 인코딩 옵션 적용"""
         p = PRESETS[preset_key]
+        # 모든 CPU 코어 사용 (인코딩 속도)
+        cmd += ["-threads", "0"]
         cmd += ["-c:v", p["vcodec"]]
         if p["crf"] is not None:
             cmd += ["-crf", p["crf"]]
         if p["preset"] is not None:
             cmd += ["-preset", p["preset"]]
+        # x265는 기본 로그가 장황해서 진행률 파싱을 방해 → 에러만 출력
+        if p["vcodec"] == "libx265":
+            cmd += ["-x265-params", "log-level=error"]
         if self._res_var.get() != "원본 유지":
             cmd += ["-vf", f"scale={self._res_var.get().split()[0]}"]
         if self._fps_var.get() != "원본 유지":
@@ -591,9 +666,9 @@ class App(TkinterDnD.Tk):
             saved = (1 - out_total / src_total) * 100
             self._status_lbl.configure(
                 text=f"✓ 완료!  {fmt_size(src_total)} → {fmt_size(out_total)}  ({saved:.0f}% 절감)",
-                text_color="#4caf50")
+                text_color=C.OK_FG)
         else:
-            self._status_lbl.configure(text="✓ 인코딩 완료!", text_color="#4caf50")
+            self._status_lbl.configure(text="✓ 인코딩 완료!", text_color=C.OK_FG)
 
         if self._open_folder_var.get() and out_dir and os.path.isdir(out_dir):
             try:
